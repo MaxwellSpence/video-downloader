@@ -83,6 +83,18 @@ def detect_platform(url: str) -> str:
     return "generic"
 
 
+COOKIES_FILE = BASE_DIR / "cookies.txt"
+
+# If YOUTUBE_COOKIES environment variable is provided, write it to COOKIES_FILE
+env_cookies = os.environ.get("YOUTUBE_COOKIES")
+if env_cookies:
+    try:
+        COOKIES_FILE.write_text(env_cookies.strip(), encoding="utf-8")
+        logger.info("Successfully loaded cookies.txt from YOUTUBE_COOKIES environment variable.")
+    except Exception as e:
+        logger.error(f"Failed to write cookies from env: {e}")
+
+
 def get_base_ydl_opts():
     opts = {
         "quiet": True,
@@ -93,6 +105,8 @@ def get_base_ydl_opts():
             }
         }
     }
+    if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
+        opts["cookiefile"] = str(COOKIES_FILE)
     if FFMPEG_BIN:
         opts["ffmpeg_location"] = FFMPEG_BIN
     return opts
