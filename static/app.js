@@ -31,6 +31,20 @@ document.addEventListener('DOMContentLoaded', () => {
   
   const downloadBtn = document.getElementById('download-btn');
   const newSearchBtn = document.getElementById('new-search-btn');
+
+  // Trimming Elements
+  const trimEnableToggle = document.getElementById('trim-enable-toggle');
+  const trimControls = document.getElementById('trim-controls');
+  const trimStartInput = document.getElementById('trim-start-input');
+  const trimEndInput = document.getElementById('trim-end-input');
+  const sliderRangeStart = document.getElementById('slider-range-start');
+  const sliderRangeEnd = document.getElementById('slider-range-end');
+  const rangeTrackHighlight = document.getElementById('range-track-highlight');
+  const trimLabelStart = document.getElementById('trim-label-start');
+  const trimLabelEnd = document.getElementById('trim-label-end');
+  const trimDurationVal = document.getElementById('trim-duration-val');
+  const btnFullVideo = document.getElementById('btn-full-video');
+  let videoTotalSeconds = 0;
   
   const progressModal = document.getElementById('progress-modal');
   const progressTitle = document.getElementById('progress-title');
@@ -256,8 +270,174 @@ document.addEventListener('DOMContentLoaded', () => {
     // Default to MP4
     setFormatTab('mp4');
 
+    // Initialize Trimming Controls
+    initTrimmingControls(data.duration_raw);
+
     resultSection.style.display = 'block';
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // Trimming Helpers
+  function formatSecondsToTime(sec) {
+    if (isNaN(sec) || sec < 0) sec = 0;
+    sec = Math.round(sec);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function parseTimeToSeconds(timeStr) {
+    if (!timeStr) return 0;
+    const parts = timeStr.trim().split(':').map(Number);
+    if (parts.some(isNaN)) return 0;
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return 0;
+  }
+
+  function initTrimmingControls(totalSec) {
+    videoTotalSeconds = totalSec && totalSec > 0 ? totalSec : 60;
+    sliderRangeStart.min = 0;
+    sliderRangeStart.max = videoTotalSeconds;
+    sliderRangeStart.value = 0;
+
+    sliderRangeEnd.min = 0;
+    sliderRangeEnd.max = videoTotalSeconds;
+    sliderRangeEnd.value = videoTotalSeconds;
+
+    trimStartInput.value = '00:00';
+    trimEndInput.value = formatSecondsToTime(videoTotalSeconds);
+
+    trimLabelStart.textContent = '00:00';
+    trimLabelEnd.textContent = formatSecondsToTime(videoTotalSeconds);
+
+    trimEnableToggle.checked = false;
+    trimControls.style.display = 'none';
+
+    updateTrimHighlight();
+  }
+
+  function updateTrimHighlight() {
+    let sVal = Math.min(Number(sliderRangeStart.value), Number(sliderRangeEnd.value));
+    let eVal = Math.max(Number(sliderRangeStart.value), Number(sliderRangeEnd.value));
+
+    const total = videoTotalSeconds || 100;
+    const leftPercent = (sVal / total) * 100;
+    const rightPercent = 100 - (eVal / total) * 100;
+
+    rangeTrackHighlight.style.left = `${leftPercent}%`;
+    rangeTrackHighlight.style.right = `${rightPercent}%`;
+
+    const diff = Math.max(0, eVal - sVal);
+    trimDurationVal.textContent = formatSecondsToTime(diff);
+
+    updateDownloadBtnText();
+  }
+
+  function updateDownloadBtnText() {
+    const isTrim = trimEnableToggle && trimEnableToggle.checked;
+    const baseText = selectedFormat === 'mp4' ? 'Baixar Vídeo MP4' : 'Baixar Áudio MP3';
+    if (isTrim) {
+      const sVal = parseTimeToSeconds(trimStartInput.value);
+      const eVal = parseTimeToSeconds(trimEndInput.value);
+      const diff = Math.max(0, eVal - sVal);
+      document.getElementById('download-btn-text').textContent = `Baixar Trecho Cortado (${formatSecondsToTime(diff)})`;
+    } else {
+      document.getElementById('download-btn-text').textContent = baseText;
+    }
+  }
+
+  // Trimming Event Listeners
+  if (trimEnableToggle) {
+    trimEnableToggle.addEventListener('change', () => {
+      trimControls.style.display = trimEnableToggle.checked ? 'block' : 'none';
+      updateDownloadBtnText();
+    });
+  }
+
+  if (sliderRangeStart) {
+    sliderRangeStart.addEventListener('input', () => {
+      let s = Number(sliderRangeStart.value);
+      let e = Number(sliderRangeEnd.value);
+      if (s > e) {
+        s = e;
+        sliderRangeStart.value = s;
+      }
+      trimStartInput.value = formatSecondsToTime(s);
+      trimLabelStart.textContent = formatSecondsToTime(s);
+      updateTrimHighlight();
+    });
+  }
+
+  if (sliderRangeEnd) {
+    sliderRangeEnd.addEventListener('input', () => {
+      let s = Number(sliderRangeStart.value);
+      let e = Number(sliderRangeEnd.value);
+      if (e < s) {
+        e = s;
+        sliderRangeEnd.value = e;
+      }
+      trimEndInput.value = formatSecondsToTime(e);
+      trimLabelEnd.textContent = formatSecondsToTime(e);
+      updateTrimHighlight();
+    });
+  }
+
+  if (trimStartInput) {
+    trimStartInput.addEventListener('change', () => {
+      let s = parseTimeToSeconds(trimStartInput.value);
+      let e = parseTimeToSeconds(trimEndInput.value);
+      if (s < 0) s = 0;
+      if (s > videoTotalSeconds) s = videoTotalSeconds;
+      if (s > e) s = e;
+      trimStartInput.value = formatSecondsToTime(s);
+      sliderRangeStart.value = s;
+      trimLabelStart.textContent = formatSecondsToTime(s);
+      updateTrimHighlight();
+    });
+  }
+
+  if (trimEndInput) {
+    trimEndInput.addEventListener('change', () => {
+      let s = parseTimeToSeconds(trimStartInput.value);
+      let e = parseTimeToSeconds(trimEndInput.value);
+      if (e < s) e = s;
+      if (e > videoTotalSeconds) e = videoTotalSeconds;
+      trimEndInput.value = formatSecondsToTime(e);
+      sliderRangeEnd.value = e;
+      trimLabelEnd.textContent = formatSecondsToTime(e);
+      updateTrimHighlight();
+    });
+  }
+
+  document.querySelectorAll('.preset-chip[data-seconds]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const dur = Number(chip.getAttribute('data-seconds'));
+      sliderRangeStart.value = 0;
+      sliderRangeEnd.value = Math.min(dur, videoTotalSeconds);
+      trimStartInput.value = '00:00';
+      trimEndInput.value = formatSecondsToTime(Math.min(dur, videoTotalSeconds));
+      trimLabelStart.textContent = '00:00';
+      trimLabelEnd.textContent = formatSecondsToTime(Math.min(dur, videoTotalSeconds));
+      updateTrimHighlight();
+    });
+  });
+
+  if (btnFullVideo) {
+    btnFullVideo.addEventListener('click', () => {
+      sliderRangeStart.value = 0;
+      sliderRangeEnd.value = videoTotalSeconds;
+      trimStartInput.value = '00:00';
+      trimEndInput.value = formatSecondsToTime(videoTotalSeconds);
+      trimLabelStart.textContent = '00:00';
+      trimLabelEnd.textContent = formatSecondsToTime(videoTotalSeconds);
+      updateTrimHighlight();
+    });
   }
 
   // Player vs Cover View Mode Toggles
@@ -305,12 +485,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (type === 'mp4') {
       mp4Options.style.display = 'block';
       mp3Options.style.display = 'none';
-      document.getElementById('download-btn-text').textContent = 'Baixar Vídeo MP4';
     } else {
       mp4Options.style.display = 'none';
       mp3Options.style.display = 'block';
-      document.getElementById('download-btn-text').textContent = 'Baixar Áudio MP3';
     }
+    updateDownloadBtnText();
   }
 
   // New Search Button
@@ -332,6 +511,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const format = selectedFormat;
     const quality = selectedFormat === 'mp4' ? qualitySelect.value : 'mp3';
 
+    const payload = { url, format, quality };
+    if (trimEnableToggle && trimEnableToggle.checked) {
+      const s = parseTimeToSeconds(trimStartInput.value);
+      const e = parseTimeToSeconds(trimEndInput.value);
+      if (e <= s) {
+        showError('O tempo final do corte deve ser maior que o tempo inicial.');
+        showToast('Tempo de corte inválido.', 'error');
+        return;
+      }
+      payload.start_time = s;
+      payload.end_time = e;
+      payload.is_trimmed = true;
+    }
+
     // Show Progress Modal
     openProgressModal();
 
@@ -339,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, format, quality })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();

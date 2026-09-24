@@ -440,11 +440,41 @@ def debug_yt():
 
 
 
-def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
+def parse_time_seconds(time_val):
+    """Parses seconds, float, or string like '01:30' / '01:15:30' into float seconds."""
+    if time_val is None:
+        return None
+    if isinstance(time_val, (int, float)):
+        return max(0.0, float(time_val))
+    val_str = str(time_val).strip()
+    if not val_str:
+        return None
+    try:
+        parts = val_str.split(":")
+        if len(parts) == 1:
+            return max(0.0, float(parts[0]))
+        elif len(parts) == 2:
+            m, s = float(parts[0]), float(parts[1])
+            return max(0.0, m * 60 + s)
+        elif len(parts) == 3:
+            h, m, s = float(parts[0]), float(parts[1]), float(parts[2])
+            return max(0.0, h * 3600 + m * 60 + s)
+    except Exception:
+        pass
+    return None
+
+
+def background_downloader(task_id: str, url: str, dl_format: str, quality: str, start_time=None, end_time=None):
     with tasks_lock:
         task = tasks.get(task_id)
         if not task:
             return
+
+    start_sec = parse_time_seconds(start_time)
+    end_sec = parse_time_seconds(end_time)
+    is_trim = False
+    if start_sec is not None and end_sec is not None and end_sec > start_sec:
+        is_trim = True
 
     def progress_hook(d):
         status = d.get("status")
@@ -490,6 +520,11 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
         "progress_hooks": [progress_hook],
         "noplaylist": True,
     })
+
+    if is_trim:
+        from yt_dlp.utils import download_range_func
+        ydl_opts["download_ranges"] = download_range_func([], [(start_sec, end_sec)])
+        ydl_opts["force_keyframes_at_cuts"] = True
 
     if dl_format == "mp3":
         # Extract audio and convert to MP3
@@ -540,6 +575,10 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
                         "player_skip": ["webpage", "configs"]
                     }
                 }
+                if is_trim:
+                    from yt_dlp.utils import download_range_func
+                    fb_opts["download_ranges"] = download_range_func([], [(start_sec, end_sec)])
+                    fb_opts["force_keyframes_at_cuts"] = True
                 with yt_dlp.YoutubeDL(fb_opts) as ydl_fb:
                     info = ydl_fb.extract_info(url, download=True)
             else:
@@ -564,7 +603,12 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
         else:
             size_str = f"{file_size_bytes / 1024:.1f} KB"
 
-        clean_filename = re.sub(r'[\\/*?:"<>|]', "", title).strip() + f".{ext}"
+        if is_trim:
+            s_min, s_sec = int(start_sec // 60), int(start_sec % 60)
+            e_min, e_sec = int(end_sec // 60), int(end_sec % 60)
+            clean_filename = f"{re.sub(r'[\\/*?:\"<>|]', '', title).strip()}_{s_min:02d}m{s_sec:02d}s_a_{e_min:02d}m{e_sec:02d}s.{ext}"
+        else:
+            clean_filename = re.sub(r'[\\/*?:"<>|]', "", title).strip() + f".{ext}"
 
         with tasks_lock:
             if task_id in tasks:
@@ -576,6 +620,7 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
                     "file_size": size_str,
                     "title": title,
                     "ext": ext,
+                    "is_trimmed": is_trim,
                 })
 
     except Exception as e:
@@ -594,6 +639,8 @@ def start_download():
     url = (data.get("url") or "").strip()
     dl_format = data.get("format", "mp4").lower()
     quality = data.get("quality", "best")
+    start_time = data.get("start_time")
+    end_time = data.get("end_time")
 
     if not url:
         return jsonify({"error": "URL não fornecida."}), 400
@@ -605,6 +652,9 @@ def start_download():
             "url": url,
             "format": dl_format,
             "quality": quality,
+            "start_time": start_time,
+            "end_time": end_time,
+            "is_trimmed": bool(start_time is not None and end_time is not None),
             "status": "queued",
             "progress": 0.0,
             "speed": "",
@@ -618,7 +668,7 @@ def start_download():
 
     thread = threading.Thread(
         target=background_downloader,
-        args=(task_id, url, dl_format, quality),
+        args=(task_id, url, dl_format, quality, start_time, end_time),
         daemon=True,
     )
     thread.start()

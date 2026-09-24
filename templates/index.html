@@ -215,6 +215,70 @@
               </div>
             </div>
 
+            <!-- Trimming (Cut Video / Audio) Tool -->
+            <div class="trim-card">
+              <div class="trim-header" id="trim-toggle-header">
+                <div class="trim-title-group">
+                  <div class="trim-icon"><i class="fa-solid fa-scissors"></i></div>
+                  <div class="trim-texts">
+                    <span class="trim-title">Cortar Trecho <span class="badge-optional">Opcional</span></span>
+                    <span class="trim-subtitle">Baixe apenas uma parte selecionada do vídeo ou áudio</span>
+                  </div>
+                </div>
+                <label class="switch-toggle" title="Ativar corte de trecho">
+                  <input type="checkbox" id="trim-enable-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+
+              <!-- Trimming Controls Body (expands when toggle checked) -->
+              <div id="trim-controls" class="trim-controls" style="display: none;">
+                <div class="trim-inputs-row">
+                  <div class="trim-input-col">
+                    <label for="trim-start-input"><i class="fa-regular fa-clock"></i> Início do Corte:</label>
+                    <div class="time-input-wrap">
+                      <input type="text" id="trim-start-input" placeholder="00:00" value="00:00" />
+                    </div>
+                  </div>
+
+                  <div class="trim-arrow">
+                    <i class="fa-solid fa-arrow-right"></i>
+                  </div>
+
+                  <div class="trim-input-col">
+                    <label for="trim-end-input"><i class="fa-solid fa-flag-checkered"></i> Fim do Corte:</label>
+                    <div class="time-input-wrap">
+                      <input type="text" id="trim-end-input" placeholder="01:00" value="01:00" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Range Slider Bar -->
+                <div class="trim-slider-wrapper">
+                  <div class="trim-slider-labels">
+                    <span id="trim-label-start">00:00</span>
+                    <span id="trim-clip-info">Duração do trecho: <strong id="trim-duration-val">00:00</strong></span>
+                    <span id="trim-label-end">00:00</span>
+                  </div>
+                  <div class="dual-range-container">
+                    <div class="range-track-bg"></div>
+                    <div id="range-track-highlight" class="range-track-highlight"></div>
+                    <input type="range" id="slider-range-start" min="0" max="100" value="0" step="1" />
+                    <input type="range" id="slider-range-end" min="0" max="100" value="100" step="1" />
+                  </div>
+                </div>
+
+                <!-- Quick Presets -->
+                <div class="trim-presets">
+                  <span class="presets-title">Atalhos rápidos:</span>
+                  <button type="button" class="preset-chip" data-seconds="30">Primeiros 30s</button>
+                  <button type="button" class="preset-chip" data-seconds="60">Primeiro 1m</button>
+                  <button type="button" class="preset-chip" data-seconds="300">Primeiros 5m</button>
+                  <button type="button" id="btn-full-video" class="preset-chip reset">Vídeo Todo</button>
+                </div>
+              </div>
+            </div>
+
             <!-- Download Action Button -->
             <div class="action-buttons">
               <button id="download-btn" class="btn-download">
