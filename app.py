@@ -258,6 +258,50 @@ def get_video_info():
         return jsonify({"error": clean_err, "details": err_msg}), 400
 
 
+@app.route("/api/debug_yt", methods=["GET"])
+def debug_yt():
+    url = request.args.get("url", "https://www.youtube.com/watch?v=fzKQzmesaeY")
+    clients_to_test = [
+        ["android"],
+        ["visionos"],
+        ["ios"],
+        ["tv"],
+        ["android_vr"],
+        ["web"],
+    ]
+    results = {}
+    for cl in clients_to_test:
+        c_name = "+".join(cl)
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": cl
+                }
+            }
+        }
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                fmts = [f for f in info.get("formats", []) if f.get("vcodec") != "none"]
+                heights = sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
+                results[c_name] = {
+                    "status": "success",
+                    "title": info.get("title"),
+                    "formats_count": len(fmts),
+                    "heights": heights
+                }
+        except Exception as e:
+            results[c_name] = {
+                "status": "error",
+                "error": str(e).split("\n")[0][:120]
+            }
+    return jsonify(results)
+
+
+
 def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
     with tasks_lock:
         task = tasks.get(task_id)
