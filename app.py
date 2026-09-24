@@ -313,47 +313,66 @@ def test_invidious():
 
 
 @app.route("/api/debug_yt", methods=["GET"])
-
 def debug_yt():
+    import urllib.request
+    import shutil
+    import subprocess
+    import io
+
     url = request.args.get("url", "https://www.youtube.com/watch?v=fzKQzmesaeY")
-    tests = [
-        ("android_skip_webpage", ["android"], ["webpage", "configs"]),
-        ("android_vr_skip_webpage", ["android_vr"], ["webpage", "configs"]),
-        ("tv_skip_webpage", ["tv"], ["webpage", "configs"]),
-        ("tv_downgraded_skip_webpage", ["tv_downgraded"], ["webpage", "configs"]),
-        ("ios_skip_webpage", ["ios"], ["webpage", "configs"]),
-        ("visionos_skip_webpage", ["visionos"], ["webpage", "configs"]),
-    ]
-    results = {}
-    for name, cl, skips in tests:
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": cl,
-                    "player_skip": skips
-                }
+    diag = {
+        "yt_dlp_version": getattr(yt_dlp, "__version__", "unknown"),
+        "bgutil_pot_bin": shutil.which("bgutil-pot"),
+    }
+
+    # Ping bgutil-pot
+    try:
+        req = urllib.request.Request("http://127.0.0.1:4416/ping")
+        with urllib.request.urlopen(req, timeout=3) as res:
+            diag["pot_server_ping"] = res.read().decode("utf-8")
+    except Exception as e:
+        diag["pot_server_ping"] = f"Error: {e}"
+
+    # Test extract with POT
+    log_stream = io.StringIO()
+    class MemLogger:
+        def debug(self, msg):
+            log_stream.write(f"DEBUG: {msg}\n")
+        def warning(self, msg):
+            log_stream.write(f"WARN: {msg}\n")
+        def error(self, msg):
+            log_stream.write(f"ERROR: {msg}\n")
+        def info(self, msg):
+            log_stream.write(f"INFO: {msg}\n")
+
+    opts = {
+        "logger": MemLogger(),
+        "verbose": True,
+        "noplaylist": True,
+        "extractor_args": {
+            "youtube": {
+                "fetch_pot": ["always"],
             }
         }
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                fmts = [f for f in info.get("formats", []) if f.get("vcodec") != "none"]
-                heights = sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
-                results[name] = {
-                    "status": "success",
-                    "title": info.get("title"),
-                    "formats_count": len(fmts),
-                    "heights": heights
-                }
-        except Exception as e:
-            results[name] = {
-                "status": "error",
-                "error": str(e).split("\n")[0][:120]
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            fmts = [f for f in info.get("formats", []) if f.get("vcodec") != "none"]
+            diag["pot_extract_result"] = {
+                "status": "success",
+                "title": info.get("title"),
+                "formats_count": len(fmts),
+                "heights": sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
             }
-    return jsonify(results)
+    except Exception as e:
+        diag["pot_extract_result"] = {
+            "status": "error",
+            "error": str(e)
+        }
+    diag["pot_extract_logs"] = log_stream.getvalue().split("\n")[-40:]
+
+    return jsonify(diag)
 
 
 
