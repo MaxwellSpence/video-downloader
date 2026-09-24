@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OmniDownloader - Baixar Vídeos do YouTube, TikTok e Instagram</title>
+  <meta name="description" content="Baixe vídeos e áudios do YouTube, TikTok e Instagram com apenas o link. Escolha a resolução MP4 ou baixe em MP3 direto no computador." />
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- Ambient background glow -->
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+  <div class="glow-orb orb-3"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-wrapper">
+        <div class="logo-icon">
+          <i class="fa-solid fa-cloud-arrow-down"></i>
+        </div>
+        <div class="logo-text">
+          <h1>Omni<span>Downloader</span></h1>
+          <p class="tagline">Baixador Universal de Vídeo e Áudio</p>
+        </div>
+      </div>
+      <div class="badge-status">
+        <span class="status-dot"></span>
+        <span>Online & Sem Limites</span>
+      </div>
+    </header>
+
+    <!-- Main Hero Section -->
+    <main class="main-content">
+      <section class="hero-section">
+        <h2 class="hero-title">
+          Cole o link e baixe em <span class="gradient-text">MP4 ou MP3</span>
+        </h2>
+        <p class="hero-subtitle">
+          Compatível com YouTube, TikTok, Instagram Reels, Shorts e muito mais com a máxima qualidade e velocidade.
+        </p>
+
+        <!-- Platform pills -->
+        <div class="platforms-bar">
+          <div class="platform-chip yt">
+            <i class="fa-brands fa-youtube"></i>
+            <span>YouTube</span>
+          </div>
+          <div class="platform-chip tt">
+            <i class="fa-brands fa-tiktok"></i>
+            <span>TikTok</span>
+          </div>
+          <div class="platform-chip ig">
+            <i class="fa-brands fa-instagram"></i>
+            <span>Instagram</span>
+          </div>
+          <div class="platform-chip tw">
+            <i class="fa-brands fa-x-twitter"></i>
+            <span>Twitter / X</span>
+          </div>
+          <div class="platform-chip fb">
+            <i class="fa-brands fa-facebook"></i>
+            <span>Facebook</span>
+          </div>
+        </div>
+
+        <!-- URL Input Box -->
+        <div class="input-card">
+          <div class="input-container">
+            <div class="input-icon">
+              <i class="fa-solid fa-link"></i>
+            </div>
+            <input
+              type="url"
+              id="video-url"
+              placeholder="Cole o link do vídeo aqui (ex: https://youtube.com/watch?v=... ou tiktok.com/@...)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="input-actions">
+              <button id="clear-btn" class="btn-icon" title="Limpar" style="display: none;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+              <button id="paste-btn" class="btn-paste" title="Colar link">
+                <i class="fa-regular fa-clipboard"></i>
+                <span>Colar</span>
+              </button>
+            </div>
+          </div>
+
+          <button id="analyze-btn" class="btn-primary">
+            <span class="btn-text"><i class="fa-solid fa-magnifying-glass"></i> Analisar Link</span>
+            <span class="btn-loader" style="display: none;">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Analisando...
+            </span>
+          </button>
+        </div>
+
+        <!-- Error Notification Banner -->
+        <div id="error-banner" class="error-banner" style="display: none;">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="error-message">Erro ao processar o link.</span>
+        </div>
+      </section>
+
+      <!-- Video Result Card -->
+      <section id="result-section" class="result-section" style="display: none;">
+        <div class="result-card">
+          <div class="result-media">
+            <div class="player-screen-box">
+              <div class="player-top-bar">
+                <div class="player-live-tag">
+                  <span class="live-pulse"></span>
+                  <span>Telinha de Prévia</span>
+                </div>
+                <div class="player-screen-modes">
+                  <button id="view-mode-player" class="mode-btn active" title="Assistir Vídeo">
+                    <i class="fa-solid fa-play"></i> Player
+                  </button>
+                  <button id="view-mode-cover" class="mode-btn" title="Ver Capa">
+                    <i class="fa-regular fa-image"></i> Capa
+                  </button>
+                </div>
+              </div>
+
+              <!-- Interactive Player Container -->
+              <div id="player-frame-wrapper" class="player-frame-wrapper">
+                <iframe
+                  id="embed-player-frame"
+                  class="embed-player-frame"
+                  src=""
+                  title="Prévia do Vídeo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowfullscreen
+                ></iframe>
+                <video id="native-player-video" class="native-player-video" controls style="display: none;"></video>
+                <div id="player-fallback-view" class="player-fallback-view" style="display: none;">
+                  <img id="fallback-thumbnail" src="" alt="Thumbnail do vídeo" />
+                  <div class="fallback-overlay-text">
+                    <i class="fa-solid fa-film"></i> Prévia de reprodução direta indisponível
+                  </div>
+                </div>
+              </div>
+
+              <!-- Static Cover View (Hidden by default, user can toggle) -->
+              <div id="cover-frame-wrapper" class="thumbnail-wrapper" style="display: none;">
+                <img id="res-thumbnail" src="" alt="Thumbnail do vídeo" />
+                <div class="duration-badge" id="res-duration">00:00</div>
+                <div class="platform-badge" id="res-platform-badge">
+                  <i class="fa-brands fa-youtube"></i>
+                </div>
+              </div>
+
+              <div class="player-bottom-hint">
+                <i class="fa-solid fa-circle-play"></i>
+                <span>Dê o play acima para conferir o vídeo e áudio antes de baixar.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-info">
+            <h3 id="res-title" class="video-title">Título do Vídeo</h3>
+            <p id="res-uploader" class="video-author">
+              <i class="fa-solid fa-user-circle"></i> <span>Canal</span>
+            </p>
+
+            <!-- Download Format Selector Tabs -->
+            <div class="format-tabs">
+              <button class="tab-btn active" data-type="mp4">
+                <i class="fa-solid fa-film"></i> Vídeo MP4
+              </button>
+              <button class="tab-btn" data-type="mp3">
+                <i class="fa-solid fa-music"></i> Áudio MP3
+              </button>
+            </div>
+
+            <!-- MP4 Quality Selection -->
+            <div id="mp4-options" class="options-container">
+              <label for="quality-select" class="option-label">
+                <i class="fa-solid fa-sliders"></i> Selecione a Resolução:
+              </label>
+              <div class="select-wrapper">
+                <select id="quality-select" class="custom-select">
+                  <option value="best">Melhor Resolução Disponível</option>
+                  <option value="1080">1080p (Full HD)</option>
+                  <option value="720">720p (HD)</option>
+                  <option value="480">480p (SD)</option>
+                  <option value="360">360p</option>
+                </select>
+                <i class="fa-solid fa-chevron-down select-chevron"></i>
+              </div>
+              <p class="quality-hint">
+                <i class="fa-solid fa-circle-info"></i> O áudio e vídeo serão mesclados com codec de alta compatibilidade.
+              </p>
+            </div>
+
+            <!-- MP3 Audio Quality Info -->
+            <div id="mp3-options" class="options-container" style="display: none;">
+              <div class="audio-badge">
+                <div class="audio-icon"><i class="fa-solid fa-headphones-simple"></i></div>
+                <div class="audio-text">
+                  <strong>Áudio Extraído em MP3 320 kbps</strong>
+                  <span>Qualidade máxima com metadados e capa preservados.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Download Action Button -->
+            <div class="action-buttons">
+              <button id="download-btn" class="btn-download">
+                <i class="fa-solid fa-arrow-down-to-bracket"></i>
+                <span id="download-btn-text">Baixar Agora</span>
+              </button>
+              <button id="new-search-btn" class="btn-secondary">
+                <i class="fa-solid fa-rotate-left"></i> Outro Link
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Progress / Download Modal / Overlay -->
+      <div id="progress-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h4 id="progress-title">Processando Download...</h4>
+            <span class="pulse-indicator"></span>
+          </div>
+
+          <div class="modal-body">
+            <div class="progress-bar-container">
+              <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+
+            <div class="progress-stats">
+              <span id="progress-percent" class="stat-percent">0%</span>
+              <span id="progress-speed" class="stat-speed">Conectando...</span>
+              <span id="progress-eta" class="stat-eta"></span>
+            </div>
+
+            <p id="progress-status-desc" class="progress-status-desc">
+              Baixando dados do servidor de vídeo...
+            </p>
+
+            <div id="completed-actions" style="display: none; margin-top: 1.5rem;">
+              <a id="file-download-link" href="#" class="btn-success" download>
+                <i class="fa-solid fa-circle-arrow-down"></i> Salvar Arquivo no Computador
+              </a>
+              <p class="auto-download-notice">O download deve iniciar automaticamente. Se não abrir, clique no botão acima.</p>
+              <button id="close-modal-btn" class="btn-close-modal">Fechar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Downloads History -->
+      <section class="history-section">
+        <div class="history-header">
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> Downloads Recentes</h3>
+          <button id="clear-history-btn" class="btn-text-only">Limpar Histórico</button>
+        </div>
+        <div id="history-list" class="history-grid">
+          <p class="empty-history-text">Nenhum download recente ainda. Seus downloads concluídos aparecerão aqui.</p>
+        </div>
+      </section>
+
+      <!-- Feature Features / FAQ -->
+      <section class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-bolt"></i></div>
+          <h4>Rápido & Direto</h4>
+          <p>Download direto sem anúncios invasivos ou redirecionamentos chatos.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-sliders"></i></div>
+          <h4>Múltiplas Resoluções</h4>
+          <p>Escolha entre 1080p Full HD, 720p, 480p ou extraia apenas o áudio em MP3.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
+          <h4>100% Seguro & Local</h4>
+          <p>O processamento roda no seu próprio computador usando Deno, Python e FFmpeg.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>OmniDownloader • Processado com tecnologia de ponta localmente.</p>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
