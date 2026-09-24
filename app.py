@@ -370,7 +370,49 @@ def debug_yt():
             "status": "error",
             "error": str(e)
         }
-    diag["pot_extract_logs"] = log_stream.getvalue().split("\n")[-40:]
+    # Test various clients
+    client_tests = [
+        ("web_skip_webpage", ["web"], ["webpage", "configs"]),
+        ("mweb_skip_webpage", ["mweb"], ["webpage", "configs"]),
+        ("web_embedded_skip_webpage", ["web_embedded"], ["webpage", "configs"]),
+        ("tv_embedded_skip_webpage", ["tv_embedded"], ["webpage", "configs"]),
+        ("android_skip_webpage", ["android"], ["webpage", "configs"]),
+        ("ios_skip_webpage", ["ios"], ["webpage", "configs"]),
+        ("android_pot", ["android"], []),
+        ("ios_pot", ["ios"], []),
+    ]
+
+    diag["client_results"] = {}
+    for name, cl, skips in client_tests:
+        opts_test = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "extractor_args": {
+                "youtube": {
+                    "fetch_pot": ["always"],
+                    "player_client": cl,
+                }
+            }
+        }
+        if skips:
+            opts_test["extractor_args"]["youtube"]["player_skip"] = skips
+
+        try:
+            with yt_dlp.YoutubeDL(opts_test) as ydl_test:
+                inf = ydl_test.extract_info(url, download=False)
+                fmts = [f for f in inf.get("formats", []) if f.get("vcodec") != "none"]
+                diag["client_results"][name] = {
+                    "status": "success",
+                    "title": inf.get("title"),
+                    "formats_count": len(fmts),
+                    "heights": sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
+                }
+        except Exception as e:
+            diag["client_results"][name] = {
+                "status": "error",
+                "error": str(e).split("\n")[0][:100]
+            }
 
     return jsonify(diag)
 
