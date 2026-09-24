@@ -258,7 +258,40 @@ def get_video_info():
         return jsonify({"error": clean_err, "details": err_msg}), 400
 
 
+@app.route("/api/test_invidious", methods=["GET"])
+def test_invidious():
+    import urllib.request
+    video_id = request.args.get("id", "fzKQzmesaeY")
+    instances = [
+        "https://invidious.nerdvpn.de",
+        "https://inv.nadeko.net",
+        "https://invidious.jing.rocks",
+        "https://yt.artemislena.eu",
+        "https://invidious.private.coffee",
+        "https://invidious.drgns.space",
+        "https://inv.tux.pizza"
+    ]
+    for inst in instances:
+        try:
+            req = urllib.request.Request(f"{inst}/api/v1/videos/{video_id}", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as res:
+                if res.status == 200:
+                    data = json.loads(res.read().decode("utf-8"))
+                    fmts = data.get("formatStreams", [])
+                    return jsonify({
+                        "status": "success",
+                        "instance": inst,
+                        "title": data.get("title"),
+                        "format_streams_count": len(fmts),
+                        "first_format": fmts[0] if fmts else None
+                    })
+        except Exception as e:
+            continue
+    return jsonify({"status": "error", "message": "All invidious instances failed"}), 502
+
+
 @app.route("/api/debug_yt", methods=["GET"])
+
 def debug_yt():
     url = request.args.get("url", "https://www.youtube.com/watch?v=fzKQzmesaeY")
     tests = [
