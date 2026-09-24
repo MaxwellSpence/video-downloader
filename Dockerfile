@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY . .
+RUN cp -r yt_dlp_plugins /usr/local/lib/python3.12/site-packages/
 
 # Create downloads folder
 RUN mkdir -p /app/downloads && chmod 777 /app/downloads
