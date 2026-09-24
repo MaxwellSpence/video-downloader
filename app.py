@@ -87,6 +87,11 @@ def get_base_ydl_opts():
     opts = {
         "quiet": True,
         "no_warnings": True,
+        "extractor_args": {
+            "youtube": {
+                "fetch_pot": ["always"]
+            }
+        }
     }
     if FFMPEG_BIN:
         opts["ffmpeg_location"] = FFMPEG_BIN
@@ -151,6 +156,7 @@ def get_video_info():
                     "noplaylist": True,
                     "extractor_args": {
                         "youtube": {
+                            "fetch_pot": ["always"],
                             "player_client": ["android", "ios", "visionos"],
                             "player_skip": ["webpage", "configs"]
                         }
@@ -161,105 +167,105 @@ def get_video_info():
             else:
                 raise e_first
 
-            if not info:
-                return jsonify({"error": "Não foi possível obter informações do vídeo."}), 400
+        if not info:
+            return jsonify({"error": "Não foi possível obter informações do vídeo."}), 400
 
-            title = info.get("title") or "Vídeo"
-            thumbnail = info.get("thumbnail") or ""
-            duration = info.get("duration")
-            uploader = info.get("uploader") or info.get("channel") or info.get("creator") or "Desconhecido"
+        title = info.get("title") or "Vídeo"
+        thumbnail = info.get("thumbnail") or ""
+        duration = info.get("duration")
+        uploader = info.get("uploader") or info.get("channel") or info.get("creator") or "Desconhecido"
 
-            formats = info.get("formats", [])
-            # Extract available resolutions
-            heights = set()
-            for f in formats:
-                h = f.get("height")
-                # Ensure it's a valid resolution with video
-                if h and isinstance(h, int) and h >= 144:
-                    if f.get("vcodec") != "none":
-                        heights.add(h)
+        formats = info.get("formats", [])
+        # Extract available resolutions
+        heights = set()
+        for f in formats:
+            h = f.get("height")
+            # Ensure it's a valid resolution with video
+            if h and isinstance(h, int) and h >= 144:
+                if f.get("vcodec") != "none":
+                    heights.add(h)
 
-            sorted_heights = sorted(list(heights), reverse=True)
+        sorted_heights = sorted(list(heights), reverse=True)
 
-            # Map to standard clean options
-            standard_resolutions = []
-            standard_targets = [2160, 1440, 1080, 720, 480, 360]
-            
-            # If heights found, filter by matching or closest lower
-            for target in standard_targets:
-                if any(h >= target for h in sorted_heights):
-                    label = f"{target}p"
-                    if target == 2160:
-                        label += " (4K UHD)"
-                    elif target == 1440:
-                        label += " (2K QHD)"
-                    elif target == 1080:
-                        label += " (Full HD)"
-                    elif target == 720:
-                        label += " (HD)"
-                    standard_resolutions.append({"value": str(target), "label": label})
+        # Map to standard clean options
+        standard_resolutions = []
+        standard_targets = [2160, 1440, 1080, 720, 480, 360]
+        
+        # If heights found, filter by matching or closest lower
+        for target in standard_targets:
+            if any(h >= target for h in sorted_heights):
+                label = f"{target}p"
+                if target == 2160:
+                    label += " (4K UHD)"
+                elif target == 1440:
+                    label += " (2K QHD)"
+                elif target == 1080:
+                    label += " (Full HD)"
+                elif target == 720:
+                    label += " (HD)"
+                standard_resolutions.append({"value": str(target), "label": label})
 
-            # If no standard resolutions were matched (e.g. TikTok / Instagram portrait), add default resolutions
-            if not standard_resolutions and sorted_heights:
-                for h in sorted_heights[:4]:
-                    standard_resolutions.append({"value": str(h), "label": f"{h}p"})
+        # If no standard resolutions were matched (e.g. TikTok / Instagram portrait), add default resolutions
+        if not standard_resolutions and sorted_heights:
+            for h in sorted_heights[:4]:
+                standard_resolutions.append({"value": str(h), "label": f"{h}p"})
 
-            # Build preview embed info
-            video_id = info.get("id") or ""
-            is_vertical = False
-            w = info.get("width")
-            h = info.get("height")
-            if w and h and h > w:
-                is_vertical = True
+        # Build preview embed info
+        video_id = info.get("id") or ""
+        is_vertical = False
+        w = info.get("width")
+        h = info.get("height")
+        if w and h and h > w:
+            is_vertical = True
 
-            embed_info = {"type": "fallback", "url": "", "is_vertical": is_vertical}
+        embed_info = {"type": "fallback", "url": "", "is_vertical": is_vertical}
 
-            url_lower = url.lower()
-            if platform == "youtube":
-                embed_info = {
-                    "type": "iframe",
-                    "url": f"https://www.youtube-nocookie.com/embed/{video_id}?autoplay=0&rel=0",
-                    "is_vertical": is_vertical
-                }
-            elif platform == "tiktok":
-                m = re.search(r'/video/(\d+)', url)
-                vid = m.group(1) if m else video_id
-                embed_info = {
-                    "type": "iframe",
-                    "url": f"https://www.tiktok.com/player/v1/{vid}",
-                    "is_vertical": True
-                }
-            elif platform == "instagram":
-                m = re.search(r'/(?:p|reel|tv)/([^/?#&]+)', url)
-                code = m.group(1) if m else video_id
-                embed_info = {
-                    "type": "iframe",
-                    "url": f"https://www.instagram.com/reel/{code}/embed/",
-                    "is_vertical": True
-                }
-            else:
-                # Try finding direct progressive mp4 stream for native video tag
-                for fmt in reversed(formats):
-                    if fmt.get("vcodec") != "none" and fmt.get("acodec") != "none" and fmt.get("ext") == "mp4" and fmt.get("url"):
-                        embed_info = {
-                            "type": "video",
-                            "url": fmt.get("url"),
-                            "is_vertical": is_vertical
-                        }
-                        break
+        url_lower = url.lower()
+        if platform == "youtube":
+            embed_info = {
+                "type": "iframe",
+                "url": f"https://www.youtube-nocookie.com/embed/{video_id}?autoplay=0&rel=0",
+                "is_vertical": is_vertical
+            }
+        elif platform == "tiktok":
+            m = re.search(r'/video/(\d+)', url)
+            vid = m.group(1) if m else video_id
+            embed_info = {
+                "type": "iframe",
+                "url": f"https://www.tiktok.com/player/v1/{vid}",
+                "is_vertical": True
+            }
+        elif platform == "instagram":
+            m = re.search(r'/(?:p|reel|tv)/([^/?#&]+)', url)
+            code = m.group(1) if m else video_id
+            embed_info = {
+                "type": "iframe",
+                "url": f"https://www.instagram.com/reel/{code}/embed/",
+                "is_vertical": True
+            }
+        else:
+            # Try finding direct progressive mp4 stream for native video tag
+            for fmt in reversed(formats):
+                if fmt.get("vcodec") != "none" and fmt.get("acodec") != "none" and fmt.get("ext") == "mp4" and fmt.get("url"):
+                    embed_info = {
+                        "type": "video",
+                        "url": fmt.get("url"),
+                        "is_vertical": is_vertical
+                    }
+                    break
 
-            return jsonify({
-                "success": True,
-                "url": url,
-                "platform": platform,
-                "title": title,
-                "thumbnail": thumbnail,
-                "duration": format_duration(duration),
-                "duration_raw": duration,
-                "uploader": uploader,
-                "resolutions": standard_resolutions,
-                "embed": embed_info,
-            })
+        return jsonify({
+            "success": True,
+            "url": url,
+            "platform": platform,
+            "title": title,
+            "thumbnail": thumbnail,
+            "duration": format_duration(duration),
+            "duration_raw": duration,
+            "uploader": uploader,
+            "resolutions": standard_resolutions,
+            "embed": embed_info,
+        })
 
     except Exception as e:
         err_msg = str(e)
@@ -447,6 +453,7 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
                 fb_opts = dict(ydl_opts)
                 fb_opts["extractor_args"] = {
                     "youtube": {
+                        "fetch_pot": ["always"],
                         "player_client": ["android", "ios", "visionos"],
                         "player_skip": ["webpage", "configs"]
                     }
@@ -456,38 +463,38 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
             else:
                 raise e_dl
 
-            title = info.get("title") or "download"
-            ext = "mp3" if dl_format == "mp3" else "mp4"
+        title = info.get("title") or "download"
+        ext = "mp3" if dl_format == "mp3" else "mp4"
 
-            # Locate the generated file
-            target_file = None
-            for f in DOWNLOADS_DIR.glob(f"{task_id}_*"):
-                if f.is_file() and not f.name.endswith(".part") and not f.name.endswith(".ytdl"):
-                    target_file = f
-                    break
+        # Locate the generated file
+        target_file = None
+        for f in DOWNLOADS_DIR.glob(f"{task_id}_*"):
+            if f.is_file() and not f.name.endswith(".part") and not f.name.endswith(".ytdl"):
+                target_file = f
+                break
 
-            if not target_file or not target_file.exists():
-                raise RuntimeError("Arquivo baixado não foi encontrado após o processamento.")
+        if not target_file or not target_file.exists():
+            raise RuntimeError("Arquivo baixado não foi encontrado após o processamento.")
 
-            file_size_bytes = target_file.stat().st_size
-            if file_size_bytes > 1024 * 1024:
-                size_str = f"{file_size_bytes / (1024 * 1024):.1f} MB"
-            else:
-                size_str = f"{file_size_bytes / 1024:.1f} KB"
+        file_size_bytes = target_file.stat().st_size
+        if file_size_bytes > 1024 * 1024:
+            size_str = f"{file_size_bytes / (1024 * 1024):.1f} MB"
+        else:
+            size_str = f"{file_size_bytes / 1024:.1f} KB"
 
-            clean_filename = re.sub(r'[\\/*?:"<>|]', "", title).strip() + f".{ext}"
+        clean_filename = re.sub(r'[\\/*?:"<>|]', "", title).strip() + f".{ext}"
 
-            with tasks_lock:
-                if task_id in tasks:
-                    tasks[task_id].update({
-                        "status": "completed",
-                        "progress": 100.0,
-                        "file_path": str(target_file),
-                        "file_name": clean_filename,
-                        "file_size": size_str,
-                        "title": title,
-                        "ext": ext,
-                    })
+        with tasks_lock:
+            if task_id in tasks:
+                tasks[task_id].update({
+                    "status": "completed",
+                    "progress": 100.0,
+                    "file_path": str(target_file),
+                    "file_name": clean_filename,
+                    "file_size": size_str,
+                    "title": title,
+                    "ext": ext,
+                })
 
     except Exception as e:
         logger.error(f"Download failed for task {task_id}: {e}")
