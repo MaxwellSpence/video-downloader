@@ -88,6 +88,11 @@ def get_base_ydl_opts():
         "quiet": True,
         "no_warnings": True,
         "remote_components": ["ejs:github"],
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["visionos", "android", "android_vr"]
+            }
+        },
     }
     if FFMPEG_BIN:
         opts["ffmpeg_location"] = FFMPEG_BIN
