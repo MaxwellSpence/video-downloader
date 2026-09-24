@@ -382,37 +382,44 @@ def debug_yt():
         ("ios_pot", ["ios"], []),
     ]
 
-    diag["client_results"] = {}
-    for name, cl, skips in client_tests:
-        opts_test = {
+    # Test direct curl_cffi webpage fetch
+    try:
+        from curl_cffi import requests as cffi_requests
+        resp = cffi_requests.get("https://www.youtube.com/watch?v=fzKQzmesaeY", impersonate="chrome124", timeout=10)
+        diag["cffi_webpage_status"] = resp.status_code
+        diag["cffi_webpage_len"] = len(resp.text)
+        diag["cffi_has_ytInitialData"] = "ytInitialData" in resp.text
+    except Exception as e:
+        diag["cffi_webpage_error"] = str(e)
+
+    # Test yt-dlp with impersonate chrome
+    try:
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+        opts_imp = {
+            "impersonate": ImpersonateTarget.from_str("chrome"),
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
             "extractor_args": {
                 "youtube": {
                     "fetch_pot": ["always"],
-                    "player_client": cl,
                 }
             }
         }
-        if skips:
-            opts_test["extractor_args"]["youtube"]["player_skip"] = skips
-
-        try:
-            with yt_dlp.YoutubeDL(opts_test) as ydl_test:
-                inf = ydl_test.extract_info(url, download=False)
-                fmts = [f for f in inf.get("formats", []) if f.get("vcodec") != "none"]
-                diag["client_results"][name] = {
-                    "status": "success",
-                    "title": inf.get("title"),
-                    "formats_count": len(fmts),
-                    "heights": sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
-                }
-        except Exception as e:
-            diag["client_results"][name] = {
-                "status": "error",
-                "error": str(e).split("\n")[0][:100]
+        with yt_dlp.YoutubeDL(opts_imp) as ydl_imp:
+            inf_imp = ydl_imp.extract_info(url, download=False)
+            fmts_imp = [f for f in inf_imp.get("formats", []) if f.get("vcodec") != "none"]
+            diag["impersonate_chrome_result"] = {
+                "status": "success",
+                "title": inf_imp.get("title"),
+                "formats_count": len(fmts_imp),
+                "heights": sorted(list(set(f.get("height") for f in fmts_imp if f.get("height"))))
             }
+    except Exception as e:
+        diag["impersonate_chrome_result"] = {
+            "status": "error",
+            "error": str(e)
+        }
 
     return jsonify(diag)
 
