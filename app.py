@@ -261,24 +261,24 @@ def get_video_info():
 @app.route("/api/debug_yt", methods=["GET"])
 def debug_yt():
     url = request.args.get("url", "https://www.youtube.com/watch?v=fzKQzmesaeY")
-    clients_to_test = [
-        ["android"],
-        ["visionos"],
-        ["ios"],
-        ["tv"],
-        ["android_vr"],
-        ["web"],
+    tests = [
+        ("android_skip_webpage", ["android"], ["webpage", "configs"]),
+        ("android_vr_skip_webpage", ["android_vr"], ["webpage", "configs"]),
+        ("tv_skip_webpage", ["tv"], ["webpage", "configs"]),
+        ("tv_downgraded_skip_webpage", ["tv_downgraded"], ["webpage", "configs"]),
+        ("ios_skip_webpage", ["ios"], ["webpage", "configs"]),
+        ("visionos_skip_webpage", ["visionos"], ["webpage", "configs"]),
     ]
     results = {}
-    for cl in clients_to_test:
-        c_name = "+".join(cl)
+    for name, cl, skips in tests:
         opts = {
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": cl
+                    "player_client": cl,
+                    "player_skip": skips
                 }
             }
         }
@@ -287,18 +287,19 @@ def debug_yt():
                 info = ydl.extract_info(url, download=False)
                 fmts = [f for f in info.get("formats", []) if f.get("vcodec") != "none"]
                 heights = sorted(list(set(f.get("height") for f in fmts if f.get("height"))))
-                results[c_name] = {
+                results[name] = {
                     "status": "success",
                     "title": info.get("title"),
                     "formats_count": len(fmts),
                     "heights": heights
                 }
         except Exception as e:
-            results[c_name] = {
+            results[name] = {
                 "status": "error",
                 "error": str(e).split("\n")[0][:120]
             }
     return jsonify(results)
+
 
 
 
