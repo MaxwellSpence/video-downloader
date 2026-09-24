@@ -87,16 +87,11 @@ def get_base_ydl_opts():
     opts = {
         "quiet": True,
         "no_warnings": True,
-        "remote_components": ["ejs:github"],
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["visionos", "android", "android_vr"]
-            }
-        },
     }
     if FFMPEG_BIN:
         opts["ffmpeg_location"] = FFMPEG_BIN
     return opts
+
 
 
 def cleanup_old_files():
@@ -143,8 +138,29 @@ def get_video_info():
     })
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as e_first:
+            if platform == "youtube":
+                logger.warning(f"Primary YouTube extraction failed ({e_first}), trying fallback clients...")
+                fallback_opts = get_base_ydl_opts()
+                fallback_opts.update({
+                    "extract_flat": False,
+                    "noplaylist": True,
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": ["android", "ios", "visionos"],
+                            "player_skip": ["webpage", "configs"]
+                        }
+                    }
+                })
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl_fb:
+                    info = ydl_fb.extract_info(url, download=False)
+            else:
+                raise e_first
+
             if not info:
                 return jsonify({"error": "Não foi possível obter informações do vídeo."}), 400
 
@@ -420,8 +436,26 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str):
         })
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as e_dl:
+            platform = detect_platform(url)
+            if platform == "youtube":
+                logger.warning(f"Download failed with primary config ({e_dl}), retrying with fallback...")
+                fb_opts = dict(ydl_opts)
+                fb_opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["android", "ios", "visionos"],
+                        "player_skip": ["webpage", "configs"]
+                    }
+                }
+                with yt_dlp.YoutubeDL(fb_opts) as ydl_fb:
+                    info = ydl_fb.extract_info(url, download=True)
+            else:
+                raise e_dl
+
             title = info.get("title") or "download"
             ext = "mp3" if dl_format == "mp3" else "mp4"
 
