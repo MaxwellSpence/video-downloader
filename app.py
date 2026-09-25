@@ -13,6 +13,7 @@ import re
 import time
 import uuid
 import threading
+import subprocess
 import logging
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template
@@ -42,6 +43,15 @@ if sys.platform == "win32":
     path_additions = [p for p in [FFMPEG_BIN, DENO_BIN] if p and p not in current_path]
     if path_additions:
         os.environ["PATH"] = ";".join(path_additions) + ";" + current_path
+
+
+def get_ffmpeg_exe():
+    if FFMPEG_BIN:
+        exe = Path(FFMPEG_BIN) / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+        if exe.exists():
+            return str(exe)
+    return "ffmpeg"
+
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -487,9 +497,14 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str, 
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                 downloaded = d.get("downloaded_bytes") or 0
                 if total > 0:
-                    t["progress"] = min(99.0, round((downloaded / total) * 100, 1))
+                    pct = (downloaded / total) * 100
+                    if is_trim:
+                        t["progress"] = min(85.0, round(pct * 0.85, 1))
+                    else:
+                        t["progress"] = min(99.0, round(pct, 1))
                 else:
-                    t["progress"] = min(95.0, t.get("progress", 0) + 1.0)
+                    max_p = 80.0 if is_trim else 95.0
+                    t["progress"] = min(max_p, t.get("progress", 0) + 1.0)
                 
                 speed = d.get("speed")
                 if speed:
@@ -507,12 +522,22 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str, 
                     t["eta"] = ""
 
             elif status == "finished":
-                t["status"] = "converting"
-                t["progress"] = 99.0
-                t["speed"] = ""
-                t["eta"] = "Finalizando..."
+                if is_trim:
+                    t["status"] = "cutting"
+                    t["progress"] = 88.0
+                    t["speed"] = "FFmpeg"
+                    t["eta"] = "Cortando trecho..."
+                else:
+                    t["status"] = "converting"
+                    t["progress"] = 99.0
+                    t["speed"] = ""
+                    t["eta"] = "Finalizando..."
 
-    out_template = str(DOWNLOADS_DIR / f"{task_id}_%(title).100s.%(ext)s")
+    # When trimming, download to raw_ prefix first so we can cut locally at high speed
+    if is_trim:
+        out_template = str(DOWNLOADS_DIR / f"raw_{task_id}_%(title).100s.%(ext)s")
+    else:
+        out_template = str(DOWNLOADS_DIR / f"{task_id}_%(title).100s.%(ext)s")
 
     ydl_opts = get_base_ydl_opts()
     ydl_opts.update({
@@ -521,24 +546,25 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str, 
         "noplaylist": True,
     })
 
-    if is_trim:
-        from yt_dlp.utils import download_range_func
-        ydl_opts["download_ranges"] = download_range_func([], [(start_sec, end_sec)])
-        ydl_opts["force_keyframes_at_cuts"] = True
-
     if dl_format == "mp3":
-        # Extract audio and convert to MP3
-        ydl_opts.update({
-            "format": "bestaudio/best",
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "320",
-                },
-                {"key": "FFmpegMetadata"},
-            ],
-        })
+        if is_trim:
+            # Download raw audio fast, FFmpeg will trim and encode to MP3 in seconds
+            ydl_opts.update({
+                "format": "bestaudio/best",
+            })
+        else:
+            # Extract full audio and convert to MP3
+            ydl_opts.update({
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "320",
+                    },
+                    {"key": "FFmpegMetadata"},
+                ],
+            })
     else:
         # MP4 video
         if quality == "best":
@@ -575,27 +601,81 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str, 
                         "player_skip": ["webpage", "configs"]
                     }
                 }
-                if is_trim:
-                    from yt_dlp.utils import download_range_func
-                    fb_opts["download_ranges"] = download_range_func([], [(start_sec, end_sec)])
-                    fb_opts["force_keyframes_at_cuts"] = True
                 with yt_dlp.YoutubeDL(fb_opts) as ydl_fb:
                     info = ydl_fb.extract_info(url, download=True)
             else:
                 raise e_dl
 
         title = info.get("title") or "download"
+        safe_title = re.sub(r'[\\/*?:\"<>|]', '', title).strip() or "video"
         ext = "mp3" if dl_format == "mp3" else "mp4"
 
-        # Locate the generated file
-        target_file = None
-        for f in DOWNLOADS_DIR.glob(f"{task_id}_*"):
+        # Locate the downloaded file
+        search_prefix = f"raw_{task_id}_" if is_trim else f"{task_id}_"
+        downloaded_raw = None
+        for f in DOWNLOADS_DIR.glob(f"{search_prefix}*"):
             if f.is_file() and not f.name.endswith(".part") and not f.name.endswith(".ytdl"):
-                target_file = f
+                downloaded_raw = f
                 break
 
-        if not target_file or not target_file.exists():
+        if not downloaded_raw or not downloaded_raw.exists():
             raise RuntimeError("Arquivo baixado não foi encontrado após o processamento.")
+
+        target_file = downloaded_raw
+
+        # If trimming is requested, execute fast, frame-accurate FFmpeg cut
+        if is_trim:
+            with tasks_lock:
+                if task_id in tasks:
+                    tasks[task_id].update({
+                        "status": "cutting",
+                        "progress": 92.0,
+                        "speed": "FFmpeg",
+                        "eta": "Cortando...",
+                    })
+
+            cut_duration = max(0.1, end_sec - start_sec)
+            cut_file = DOWNLOADS_DIR / f"{task_id}_{safe_title}.{ext}"
+            ffmpeg_exe = get_ffmpeg_exe()
+
+            if dl_format == "mp3":
+                cut_cmd = [
+                    ffmpeg_exe, "-y",
+                    "-ss", str(start_sec),
+                    "-t", str(cut_duration),
+                    "-i", str(downloaded_raw),
+                    "-vn",
+                    "-c:a", "libmp3lame",
+                    "-b:a", "320k",
+                    str(cut_file)
+                ]
+            else:
+                cut_cmd = [
+                    ffmpeg_exe, "-y",
+                    "-ss", str(start_sec),
+                    "-t", str(cut_duration),
+                    "-i", str(downloaded_raw),
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "22",
+                    "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    str(cut_file)
+                ]
+
+            logger.info(f"Executing fast local FFmpeg trim: {' '.join(cut_cmd)}")
+            res = subprocess.run(cut_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if res.returncode != 0:
+                logger.error(f"FFmpeg trim error: {res.stderr}")
+                raise RuntimeError(f"Erro ao cortar o arquivo com FFmpeg: {res.stderr[-200:]}")
+
+            # Delete the raw un-trimmed temporary file immediately
+            try:
+                downloaded_raw.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            target_file = cut_file
 
         file_size_bytes = target_file.stat().st_size
         if file_size_bytes > 1024 * 1024:
@@ -606,9 +686,9 @@ def background_downloader(task_id: str, url: str, dl_format: str, quality: str, 
         if is_trim:
             s_min, s_sec = int(start_sec // 60), int(start_sec % 60)
             e_min, e_sec = int(end_sec // 60), int(end_sec % 60)
-            clean_filename = f"{re.sub(r'[\\/*?:\"<>|]', '', title).strip()}_{s_min:02d}m{s_sec:02d}s_a_{e_min:02d}m{e_sec:02d}s.{ext}"
+            clean_filename = f"{safe_title}_{s_min:02d}m{s_sec:02d}s_a_{e_min:02d}m{e_sec:02d}s.{ext}"
         else:
-            clean_filename = re.sub(r'[\\/*?:"<>|]', "", title).strip() + f".{ext}"
+            clean_filename = f"{safe_title}.{ext}"
 
         with tasks_lock:
             if task_id in tasks:

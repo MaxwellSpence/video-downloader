@@ -551,13 +551,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modal helpers
   function openProgressModal() {
+    const isTrimmed = trimEnableToggle && trimEnableToggle.checked;
     progressModal.style.display = 'flex';
-    progressTitle.textContent = selectedFormat === 'mp4' ? 'Preparando Vídeo MP4...' : 'Extraindo Áudio MP3...';
+    if (isTrimmed) {
+      const s = trimStartInput ? trimStartInput.value : '00:00';
+      const e = trimEndInput ? trimEndInput.value : '00:00';
+      progressTitle.textContent = selectedFormat === 'mp4'
+        ? `Cortando Vídeo MP4 (${s} - ${e})`
+        : `Cortando Áudio MP3 (${s} - ${e})`;
+      progressStatusDesc.textContent = 'Baixando fluxo de alta velocidade para corte...';
+    } else {
+      progressTitle.textContent = selectedFormat === 'mp4' ? 'Preparando Vídeo MP4...' : 'Extraindo Áudio MP3...';
+      progressStatusDesc.textContent = 'Iniciando download no servidor local...';
+    }
     progressBarFill.style.width = '0%';
     progressPercent.textContent = '0%';
     progressSpeed.textContent = 'Conectando...';
     progressEta.textContent = '';
-    progressStatusDesc.textContent = 'Iniciando download e processamento no servidor local...';
     completedActions.style.display = 'none';
   }
 
@@ -588,15 +598,20 @@ document.addEventListener('DOMContentLoaded', () => {
           progressPercent.textContent = `${pct}%`;
           progressSpeed.textContent = task.speed || 'Baixando...';
           progressEta.textContent = task.eta ? `Restante: ${task.eta}` : '';
-          progressStatusDesc.textContent = 'Baixando fluxos de mídia...';
-        } else if (task.status === 'converting') {
-          progressBarFill.style.width = '99%';
-          progressPercent.textContent = '99%';
-          progressSpeed.textContent = 'Convertendo com FFmpeg...';
-          progressEta.textContent = '';
-          progressStatusDesc.textContent = selectedFormat === 'mp4'
-            ? 'Mesclando áudio e vídeo em MP4...'
-            : 'Convertendo áudio para MP3 320 kbps...';
+          progressStatusDesc.textContent = task.is_trimmed
+            ? 'Baixando mídia em alta velocidade para recorte...'
+            : 'Baixando fluxos de mídia...';
+        } else if (task.status === 'cutting' || task.status === 'converting') {
+          const pct = task.progress || 90;
+          progressBarFill.style.width = `${pct}%`;
+          progressPercent.textContent = `${pct}%`;
+          progressSpeed.textContent = task.speed || 'FFmpeg';
+          progressEta.textContent = task.eta || 'Processando...';
+          progressStatusDesc.textContent = task.is_trimmed
+            ? 'Cortando trecho selecionado com precisão...'
+            : (selectedFormat === 'mp4'
+              ? 'Mesclando áudio e vídeo em MP4...'
+              : 'Convertendo áudio para MP3 320 kbps...');
         } else if (task.status === 'completed') {
           clearInterval(activePollInterval);
           activePollInterval = null;
