@@ -142,13 +142,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Error banner handler
-  function showError(msg) {
+  function showError(msg, isAgeGate = false) {
     errorMessage.textContent = msg;
     errorBanner.style.display = 'flex';
+    const solveBtn = document.getElementById('btn-solve-cookies');
+    if (solveBtn) {
+      solveBtn.style.display = isAgeGate ? 'inline-flex' : 'none';
+    }
   }
 
   function hideError() {
     errorBanner.style.display = 'none';
+    const solveBtn = document.getElementById('btn-solve-cookies');
+    if (solveBtn) solveBtn.style.display = 'none';
   }
 
   // Analyze link
@@ -178,7 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Falha ao analisar o vídeo.');
+        showError(data.error || 'Falha ao analisar o vídeo.', !!data.is_age_gate);
+        return;
       }
 
       currentVideoData = data;
@@ -719,5 +726,166 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('Histórico limpo.', 'info');
     }
   });
+
+  // ========================
+  // YouTube Cookies Management
+  // ========================
+  const btnOpenCookies = document.getElementById('btn-open-cookies');
+  const btnSolveCookies = document.getElementById('btn-solve-cookies');
+  const cookieModal = document.getElementById('cookie-modal');
+  const closeCookieModalBtn = document.getElementById('close-cookie-modal-btn');
+  const cookieStatusLabel = document.getElementById('cookie-status-label');
+  const cookieInfoText = document.getElementById('cookie-info-text');
+  const cookieIndicator = document.getElementById('cookie-indicator');
+  const btnDeleteCookies = document.getElementById('btn-delete-cookies');
+  const cookieFileInput = document.getElementById('cookie-file-input');
+  const cookieDropzone = document.getElementById('cookie-dropzone');
+  const cookieDropzoneLabel = document.getElementById('cookie-dropzone-label');
+  const cookieTextInput = document.getElementById('cookie-text-input');
+  const btnSaveCookies = document.getElementById('btn-save-cookies');
+
+  async function checkCookieStatus() {
+    try {
+      const res = await fetch('/api/cookies/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.has_cookies) {
+        btnOpenCookies?.classList.add('active');
+        if (cookieStatusLabel) cookieStatusLabel.textContent = 'Cookies Ativos';
+        if (cookieIndicator) cookieIndicator.classList.add('active');
+        if (cookieInfoText) {
+          const kb = (data.size_bytes / 1024).toFixed(1);
+          cookieInfoText.textContent = `Cookies ativos (${kb} KB • atualizado em ${data.modified || 'hoje'})`;
+        }
+        if (btnDeleteCookies) btnDeleteCookies.style.display = 'inline-flex';
+      } else {
+        btnOpenCookies?.classList.remove('active');
+        if (cookieStatusLabel) cookieStatusLabel.textContent = 'Cookies';
+        if (cookieIndicator) cookieIndicator.classList.remove('active');
+        if (cookieInfoText) cookieInfoText.textContent = 'Nenhum cookie ativo no servidor.';
+        if (btnDeleteCookies) btnDeleteCookies.style.display = 'none';
+      }
+    } catch (err) {
+      console.error('Failed to check cookie status', err);
+    }
+  }
+
+  function openCookieModal() {
+    if (cookieModal) cookieModal.style.display = 'flex';
+    checkCookieStatus();
+  }
+
+  function closeCookieModal() {
+    if (cookieModal) cookieModal.style.display = 'none';
+  }
+
+  if (btnOpenCookies) btnOpenCookies.addEventListener('click', openCookieModal);
+  if (btnSolveCookies) btnSolveCookies.addEventListener('click', openCookieModal);
+  if (closeCookieModalBtn) closeCookieModalBtn.addEventListener('click', closeCookieModal);
+
+  // File drop / select
+  if (cookieFileInput) {
+    cookieFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (cookieDropzoneLabel) cookieDropzoneLabel.innerHTML = `Arquivo: <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (cookieTextInput) cookieTextInput.value = evt.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+  }
+
+  if (cookieDropzone) {
+    ['dragenter', 'dragover'].forEach(name => {
+      cookieDropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        cookieDropzone.classList.add('dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(name => {
+      cookieDropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        cookieDropzone.classList.remove('dragover');
+      });
+    });
+    cookieDropzone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer?.files[0];
+      if (file) {
+        if (cookieDropzoneLabel) cookieDropzoneLabel.innerHTML = `Arquivo: <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (cookieTextInput) cookieTextInput.value = evt.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+  }
+
+  // Save cookies
+  if (btnSaveCookies) {
+    btnSaveCookies.addEventListener('click', async () => {
+      const text = cookieTextInput ? cookieTextInput.value.trim() : '';
+      if (!text) {
+        showToast('Cole o conteúdo dos cookies ou selecione um arquivo cookies.txt.', 'error');
+        return;
+      }
+
+      btnSaveCookies.disabled = true;
+      btnSaveCookies.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Salvando...';
+
+      try {
+        const res = await fetch('/api/cookies/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookies: text })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Erro ao salvar cookies.');
+        }
+
+        showToast('Cookies salvos com sucesso! 18+ liberado.', 'success');
+        checkCookieStatus();
+        closeCookieModal();
+        hideError();
+
+        // If there is a pending URL in urlInput, automatically re-analyze!
+        if (urlInput.value.trim()) {
+          analyzeLink();
+        }
+
+      } catch (err) {
+        showToast(err.message || 'Erro ao salvar cookies.', 'error');
+      } finally {
+        btnSaveCookies.disabled = false;
+        btnSaveCookies.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Cookies no Servidor';
+      }
+    });
+  }
+
+  // Delete cookies
+  if (btnDeleteCookies) {
+    btnDeleteCookies.addEventListener('click', async () => {
+      if (!confirm('Deseja remover os cookies do servidor?')) return;
+      try {
+        const res = await fetch('/api/cookies', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast('Cookies removidos.', 'info');
+          if (cookieTextInput) cookieTextInput.value = '';
+          if (cookieDropzoneLabel) cookieDropzoneLabel.innerHTML = 'Clique para selecionar ou arraste o <strong>cookies.txt</strong>';
+          checkCookieStatus();
+        }
+      } catch (err) {
+        showToast('Erro ao remover cookies.', 'error');
+      }
+    });
+  }
+
+  // Check on initial load
+  checkCookieStatus();
 
 });

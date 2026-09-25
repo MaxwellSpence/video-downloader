@@ -295,13 +295,15 @@ def get_video_info():
         err_msg = str(e)
         logger.error(f"Error fetching info for {url}: {err_msg}")
         clean_err = "Erro ao analisar o link. Verifique se o vídeo é público e o link está correto."
+        is_age_gate = False
         if "Private video" in err_msg:
             clean_err = "Este vídeo é privado ou requer login."
-        elif "Sign in to confirm" in err_msg:
-            clean_err = "Este vídeo possui restrição de idade ou requer login."
+        elif "Sign in to confirm" in err_msg or "confirm your age" in err_msg.lower() or "age-restricted" in err_msg.lower():
+            clean_err = "Este vídeo possui restrição de idade (18+) ou requer login no YouTube."
+            is_age_gate = True
         elif "Video unavailable" in err_msg:
             clean_err = "Vídeo indisponível ou excluído."
-        return jsonify({"error": clean_err, "details": err_msg}), 400
+        return jsonify({"error": clean_err, "details": err_msg, "is_age_gate": is_age_gate}), 400
 
 
 @app.route("/api/test_invidious", methods=["GET"])
@@ -784,6 +786,61 @@ def download_file(task_id):
         download_name=file_name,
         conditional=True,
     )
+
+
+@app.route("/api/cookies/status", methods=["GET"])
+def cookies_status():
+    has_cookies = COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0
+    size_bytes = COOKIES_FILE.stat().st_size if has_cookies else 0
+    modified = time.strftime("%d/%m/%Y %H:%M", time.localtime(COOKIES_FILE.stat().st_mtime)) if has_cookies else None
+    return jsonify({
+        "has_cookies": has_cookies,
+        "size_bytes": size_bytes,
+        "modified": modified
+    })
+
+
+@app.route("/api/cookies/upload", methods=["POST"])
+def upload_cookies():
+    cookies_content = ""
+    if "file" in request.files:
+        file = request.files["file"]
+        if file and file.filename:
+            cookies_content = file.read().decode("utf-8", errors="ignore")
+    else:
+        data = request.get_json() or {}
+        cookies_content = data.get("cookies", "")
+
+    cookies_content = cookies_content.strip()
+    if not cookies_content:
+        return jsonify({"error": "Nenhum conteúdo de cookies fornecido."}), 400
+
+    if "youtube" not in cookies_content.lower() and "\t" not in cookies_content:
+        return jsonify({"error": "O arquivo não parece conter cookies válidos do YouTube em formato Netscape."}), 400
+
+    try:
+        COOKIES_FILE.write_text(cookies_content, encoding="utf-8")
+        logger.info(f"Cookies updated successfully ({len(cookies_content)} bytes).")
+        return jsonify({
+            "success": True,
+            "message": "Cookies do YouTube salvos com sucesso!",
+            "size_bytes": COOKIES_FILE.stat().st_size,
+            "modified": time.strftime("%d/%m/%Y %H:%M", time.localtime(COOKIES_FILE.stat().st_mtime))
+        })
+    except Exception as e:
+        logger.error(f"Error saving cookies: {e}")
+        return jsonify({"error": f"Erro ao salvar arquivo de cookies: {e}"}), 500
+
+
+@app.route("/api/cookies", methods=["DELETE"])
+def delete_cookies():
+    try:
+        if COOKIES_FILE.exists():
+            COOKIES_FILE.unlink()
+        return jsonify({"success": True, "message": "Cookies removidos com sucesso."})
+    except Exception as e:
+        logger.error(f"Error deleting cookies: {e}")
+        return jsonify({"error": f"Erro ao remover cookies: {e}"}), 500
 
 
 if __name__ == "__main__":
